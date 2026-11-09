@@ -1,5 +1,6 @@
 """Fetch and audit a single public web page."""
 from __future__ import annotations
+import codecs
 import json
 import urllib.error
 import urllib.request
@@ -22,6 +23,15 @@ class Check:
 def _check(name, condition, success, warning, value=None):
     return Check(name, "pass" if condition else "warning",
                  success if condition else warning, value)
+
+
+def _decode(body: bytes, charset: str | None) -> str:
+    """Decode HTML, falling back to UTF-8 when the declared charset is unknown."""
+    try:
+        codecs.lookup(charset or "utf-8")
+    except LookupError:
+        charset = "utf-8"
+    return body.decode(charset or "utf-8", errors="replace")
 
 
 def audit_url(url: str, timeout: int = 15) -> dict[str, Any]:
@@ -48,33 +58,42 @@ def audit_url(url: str, timeout: int = 15) -> dict[str, Any]:
         content_type = exc.headers.get("Content-Type", "") if exc.headers else ""
         charset = exc.headers.get_content_charset() if exc.headers else None
         body = exc.read(MAX_RESPONSE_BYTES + 1)
+
     body = body[:MAX_RESPONSE_BYTES]
     if "html" not in content_type.lower() and content_type:
         raise ValueError(f"The URL did not return HTML (Content-Type: {content_type}).")
-    html = body.decode(charset or "utf-8", errors="replace")
+
+    html = _decode(body, charset)
     page = PageParser(final_url)
     page.feed(html)
     page.close()
+
     internal_links, external_links = classify_links(final_url, page.links)
     h1_count = len(page.headings["h1"])
     missing_alt = sum(1 for item in page.images if not item["has_alt"])
     title_length = len(page.title)
     description_length = len(page.meta_description)
+
     checks = [
         _check("HTTP response", 200 <= status_code < 400,
                f"Page returned HTTP {status_code}.", f"Page returned HTTP {status_code}.", status_code),
-        _check("Page title", bool(page.title), "A page title is present.", "The page title is missing.", page.title),
+        _check("Page title", bool(page.title),
+               "A page title is present.", "The page title is missing.", page.title),
         _check("Title length", 30 <= title_length <= 60,
                f"Title is {title_length} characters (30-60 is a common guideline).",
-               f"Title is {title_length} characters; review whether it is descriptive and concise.", title_length),
+               f"Title is {title_length} characters; review whether it is descriptive and concise.",
+               title_length),
         _check("Meta description", bool(page.meta_description),
-               "A meta description is present.", "The meta description is missing.", page.meta_description),
+               "A meta description is present.", "The meta description is missing.",
+               page.meta_description),
         _check("Description length", 70 <= description_length <= 160,
                f"Description is {description_length} characters (70-160 is a common guideline).",
-               f"Description is {description_length} characters; review its clarity and length.", description_length),
+               f"Description is {description_length} characters; review its clarity and length.",
+               description_length),
         _check("Canonical URL", bool(page.canonical),
                "A canonical link is present.", "No canonical link was found.", page.canonical),
-        _check("H1 heading", h1_count == 1, "Exactly one H1 heading was found.",
+        _check("H1 heading", h1_count == 1,
+               "Exactly one H1 heading was found.",
                f"Found {h1_count} H1 headings; review the page's main heading.", h1_count),
         _check("Image alt text", missing_alt == 0,
                "All detected images have an alt attribute.",
@@ -84,6 +103,7 @@ def audit_url(url: str, timeout: int = 15) -> dict[str, Any]:
                "No noindex directive was found in the robots meta tag.",
                "A noindex directive was found in the robots meta tag.", page.robots),
     ]
+
     return {
         "tool": "agentT SEO Auditor", "version": "0.1.0",
         "requested_url": request_url, "final_url": final_url,
