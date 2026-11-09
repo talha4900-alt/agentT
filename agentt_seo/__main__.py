@@ -1,5 +1,6 @@
 """Command-line entry point."""
 import argparse
+import http.client
 import sys
 import urllib.error
 from .auditor import audit_url, format_report, report_json
@@ -17,7 +18,8 @@ def main():
         parser.error("--timeout must be at least 1 second")
     try:
         report = audit_url(args.url, timeout=args.timeout)
-    except (ValueError, urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (ValueError, http.client.HTTPException, urllib.error.URLError,
+            TimeoutError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     print(report_json(report) if args.json else format_report(report))
