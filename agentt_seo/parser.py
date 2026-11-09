@@ -19,14 +19,21 @@ class PageParser(HTMLParser):
         self.links = []
         self.empty_href_count = 0
         self._in_title = False
+        self._title_done = False
+        self._svg_depth = 0
         self._heading_tag = None
         self._heading_parts = []
 
     def handle_starttag(self, tag, attrs):
         attrs_dict = {key.lower(): (value or "") for key, value in attrs}
         tag = tag.lower()
-        if tag == "title":
-            self._in_title = True
+        if tag == "svg":
+            self._svg_depth += 1
+        elif tag == "title":
+            # Only the first document <title> counts; <title> inside inline SVG
+            # icons is accessibility text, not the page title.
+            if self._svg_depth == 0 and not self._title_done:
+                self._in_title = True
         elif tag == "meta":
             name = attrs_dict.get("name", "").strip().lower()
             if name == "description" and not self.meta_description:
@@ -56,9 +63,13 @@ class PageParser(HTMLParser):
 
     def handle_endtag(self, tag):
         tag = tag.lower()
-        if tag == "title":
+        if tag == "svg":
+            self._svg_depth = max(0, self._svg_depth - 1)
+        elif tag == "title":
+            if self._in_title:
+                self.title = " ".join("".join(self.title_parts).split())
+                self._title_done = True
             self._in_title = False
-            self.title = " ".join("".join(self.title_parts).split())
         elif tag == self._heading_tag:
             if self._heading_tag:
                 text = " ".join("".join(self._heading_parts).split())
