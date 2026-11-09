@@ -44,7 +44,7 @@ class PageParser(HTMLParser):
             self.images.append({"src": attrs_dict.get("src", ""),
                                 "has_alt": "alt" in attrs_dict,
                                 "alt": attrs_dict.get("alt", "")})
-                elif tag == "a":
+        elif tag == "a":
             # Only an <a> that declares href but leaves it blank counts as empty.
             # Anchors such as <a name="top"> have no href and are not links.
             has_href = any(key.lower() == "href" for key, _ in attrs)
