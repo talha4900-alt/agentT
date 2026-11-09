@@ -24,6 +24,19 @@ class PageParserTests(unittest.TestCase):
         self.assertFalse(parser.images[1]["has_alt"])
         self.assertEqual(parser.empty_href_count, 1)
 
+    def test_named_anchor_is_not_counted_as_empty_href(self):
+        parser = PageParser("https://example.com/")
+        parser.feed('<a name="top"></a><a href="">Blank</a><a href="#">Hash</a>')
+        self.assertEqual(parser.empty_href_count, 1)
+        self.assertEqual(parser.links, ["https://example.com/"])
+
+    def test_svg_titles_do_not_change_page_title(self):
+        parser = PageParser("https://example.com/")
+        parser.feed("<html><head><title>Real Title</title></head><body>"
+                    "<svg><title>Cart icon</title></svg>"
+                    "<svg><title>Search icon</title></svg></body></html>")
+        self.assertEqual(parser.title, "Real Title")
+
     def test_classifies_links(self):
         self.assertEqual(classify_links("https://example.com/",
             ["https://example.com/about", "https://other.example/", "mailto:x@y.com"]), (1, 1))
